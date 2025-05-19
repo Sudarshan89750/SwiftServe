@@ -19,6 +19,9 @@ const AboutPage = lazy(() => import('./pages/AboutPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
+const ServiceTrackingPage = lazy(() => import('./pages/ServiceTrackingPage'));
+const ProviderDashboardPage = lazy(() => import('./pages/ProviderDashboardPage'));
+const ReviewPage = lazy(() => import('./pages/ReviewPage'));
 
 // Protected route component
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
@@ -50,8 +53,16 @@ function AppRoutes() {
         <Route 
           path="/dashboard" 
           element={
-            <ProtectedRoute allowedRoles={['admin', 'provider']}>
+            <ProtectedRoute>
               <DashboardPage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/provider-dashboard" 
+          element={
+            <ProtectedRoute allowedRoles={['provider']}>
+              <ProviderDashboardPage />
             </ProtectedRoute>
           } 
         />
@@ -68,6 +79,22 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <BookingPage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/tracking/:bookingId" 
+          element={
+            <ProtectedRoute>
+              <ServiceTrackingPage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/review/:bookingId" 
+          element={
+            <ProtectedRoute>
+              <ReviewPage />
             </ProtectedRoute>
           } 
         />

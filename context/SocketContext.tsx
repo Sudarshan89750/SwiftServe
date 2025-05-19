@@ -10,13 +10,15 @@ interface SocketContextType {
   nearbyProviders: ProviderLocation[];
   connectedProvider: ProviderLocation | null;
   pairWithProvider: (providerId: string) => void;
+  toggleProviderAvailability: (isAvailable: boolean) => void;
+  sendMessage: (to: string, text: string) => void;
+  messages: Message[];
 }
 
 export interface ServiceRequest {
-  userId: string;
   serviceId: string;
+  providerId: string;
   location: [number, number];
-  timestamp: number;
 }
 
 export interface ProviderLocation {
@@ -29,41 +31,48 @@ export interface ProviderLocation {
   rating?: number;
 }
 
+export interface Message {
+  id: string;
+  from: string;
+  fromName: string;
+  to: string;
+  text: string;
+  timestamp: Date;
+}
+
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
 
-// For demo purposes, we're using a mock socket URL
-// In production, this would be your actual socket server
-const SOCKET_URL = 'https://api.servicehub.example';
+// Socket server URL
+const SOCKET_URL = 'http://localhost:5000';
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [nearbyProviders, setNearbyProviders] = useState<ProviderLocation[]>([]);
   const [connectedProvider, setConnectedProvider] = useState<ProviderLocation | null>(null);
-  const { user } = useAuth();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const { user, isAuthenticated } = useAuth();
 
   useEffect(() => {
     // Only connect if user is authenticated
-    if (!user) return;
+    if (!isAuthenticated || !user) return;
+
+    // Get token from localStorage
+    const token = localStorage.getItem('token');
+    if (!token) return;
 
     // Initialize socket connection
     const socketInstance = io(SOCKET_URL, {
-      // For demo, we're not actually connecting to a server
-      // This creates a socket instance that doesn't attempt real connections
-      autoConnect: false,
-      transports: ['websocket'],
+      auth: {
+        token
+      },
+      transports: ['websocket', 'polling']
     });
-
-    // In a real app, we would connect here
-    // socketInstance.connect();
 
     // Setup event listeners
     socketInstance.on('connect', () => {
       console.log('Socket connected');
       setIsConnected(true);
-      
-      // Join user-specific room
-      socketInstance.emit('join-as', { userId: user.id, role: user.role });
     });
 
     socketInstance.on('disconnect', () => {
@@ -71,45 +80,86 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setIsConnected(false);
     });
 
-    // Listen for nearby providers (for customers)
-    socketInstance.on('nearby-providers', (providers: ProviderLocation[]) => {
-      console.log('Received nearby providers:', providers);
-      setNearbyProviders(providers);
+    socketInstance.on('connect_error', (error) => {
+      console.error('Socket connection error:', error);
     });
 
-    // Listen for provider pairing
-    socketInstance.on('paired', ({ partnerSocketId, partnerRole, partnerCoordinates, partnerName, partnerRating }) => {
-      console.log('Paired with provider:', partnerSocketId);
-      setConnectedProvider({
-        providerId: partnerSocketId,
-        coordinates: partnerCoordinates,
+    // Listen for active providers
+    socketInstance.on('providers:active', (providers: [string, { latitude: number, longitude: number }][]) => {
+      console.log('Received active providers:', providers);
+      
+      const formattedProviders: ProviderLocation[] = providers.map(([id, location]) => ({
+        providerId: id,
+        coordinates: [location.latitude, location.longitude],
         lastUpdated: Date.now(),
-        isAvailable: true,
-        name: partnerName,
-        rating: partnerRating
-      });
+        isAvailable: true
+      }));
+      
+      setNearbyProviders(formattedProviders);
     });
 
-    // Listen for provider location updates
-    socketInstance.on('receive-location', ({ id, coordinates }) => {
-      if (connectedProvider && id === connectedProvider.providerId) {
-        setConnectedProvider(prev => prev ? {
-          ...prev,
-          coordinates,
-          lastUpdated: Date.now()
-        } : null);
+    // Listen for service requests (for providers)
+    socketInstance.on('service:request', (data: { 
+      customerId: string, 
+      customerName: string, 
+      serviceId: string, 
+      location: { latitude: number, longitude: number } 
+    }) => {
+      console.log('Received service request:', data);
+      // Handle service request notification
+    });
+
+    // Listen for service responses (for customers)
+    socketInstance.on('service:response', (data: { 
+      providerId: string, 
+      accepted: boolean 
+    }) => {
+      console.log('Received service response:', data);
+      
+      if (data.accepted) {
+        // Find provider in nearby providers
+        const provider = nearbyProviders.find(p => p.providerId === data.providerId);
+        if (provider) {
+          setConnectedProvider(provider);
+        }
       }
     });
 
-    // Listen for provider disconnection
-    socketInstance.on('user-disconnected', (id) => {
-      if (connectedProvider && connectedProvider.providerId === id) {
-        setConnectedProvider(null);
-      }
+    // Listen for messages
+    socketInstance.on('message:receive', (data: { 
+      from: string, 
+      fromName: string, 
+      text: string, 
+      timestamp: string 
+    }) => {
+      console.log('Received message:', data);
+      
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `msg-${Date.now()}-${Math.random()}`,
+          from: data.from,
+          fromName: data.fromName,
+          to: user.id,
+          text: data.text,
+          timestamp: new Date(data.timestamp)
+        }
+      ]);
     });
 
-    // For demo purposes, we'll simulate connection
-    setIsConnected(true);
+    // Listen for errors
+    socketInstance.on('message:error', (error) => {
+      console.error('Message error:', error);
+    });
+
+    socketInstance.on('service:request:error', (error) => {
+      console.error('Service request error:', error);
+    });
+
+    socketInstance.on('service:response:error', (error) => {
+      console.error('Service response error:', error);
+    });
+
     setSocket(socketInstance);
 
     return () => {
@@ -117,18 +167,24 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         socketInstance.disconnect();
       }
     };
-  }, [user]);
+  }, [isAuthenticated, user]);
 
   // Emit user location update
   const emitLocation = useCallback((coordinates: [number, number]) => {
     if (socket && user) {
       console.log('Emitting location update:', coordinates);
-      socket.emit('send-location', {
-        userId: user.id,
-        role: user.role,
-        coordinates,
-        timestamp: Date.now(),
+      socket.emit('provider:location', {
+        latitude: coordinates[0],
+        longitude: coordinates[1]
       });
+    }
+  }, [socket, user]);
+
+  // Toggle provider availability
+  const toggleProviderAvailability = useCallback((isAvailable: boolean) => {
+    if (socket && user && user.role === 'provider') {
+      console.log('Toggling provider availability:', isAvailable);
+      socket.emit('provider:availability', isAvailable);
     }
   }, [socket, user]);
 
@@ -136,16 +192,14 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const emitServiceRequest = useCallback((request: ServiceRequest) => {
     if (socket && user) {
       console.log('Emitting service request:', request);
-      socket.emit('service_request', {
-        ...request,
-        userId: user.id,
+      socket.emit('service:request', {
+        providerId: request.providerId,
+        serviceId: request.serviceId,
+        location: {
+          latitude: request.location[0],
+          longitude: request.location[1]
+        }
       });
-      
-      // For demo: simulate receiving nearby providers
-      setTimeout(() => {
-        const mockProviders = generateMockNearbyProviders(request.location);
-        setNearbyProviders(mockProviders);
-      }, 1000);
     }
   }, [socket, user]);
 
@@ -153,47 +207,35 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const pairWithProvider = useCallback((providerId: string) => {
     if (socket && user) {
       console.log('Requesting to pair with provider:', providerId);
-      socket.emit('request-pair', {
-        userId: user.id,
-        providerId
-      });
       
-      // For demo: simulate pairing with the selected provider
-      const selectedProvider = nearbyProviders.find(p => p.providerId === providerId);
-      if (selectedProvider) {
-        setTimeout(() => {
-          setConnectedProvider({
-            ...selectedProvider,
-            lastUpdated: Date.now()
-          });
-        }, 800);
+      // Find provider in nearby providers
+      const provider = nearbyProviders.find(p => p.providerId === providerId);
+      if (provider) {
+        setConnectedProvider(provider);
       }
     }
   }, [socket, user, nearbyProviders]);
 
-  // Helper function to generate mock nearby providers
-  const generateMockNearbyProviders = (userLocation: [number, number]): ProviderLocation[] => {
-    return Array.from({ length: 5 }, (_, i) => {
-      // Generate random coordinates within ~2km
-      const lat = userLocation[0] + (Math.random() - 0.5) * 0.02;
-      const lng = userLocation[1] + (Math.random() - 0.5) * 0.02;
+  // Send message
+  const sendMessage = useCallback((to: string, text: string) => {
+    if (socket && user) {
+      console.log('Sending message to:', to);
+      socket.emit('message:send', { to, text });
       
-      // Calculate rough distance in km
-      const latDiff = (lat - userLocation[0]) * 111; // 1 deg lat ≈ 111 km
-      const lngDiff = (lng - userLocation[1]) * 111 * Math.cos(userLocation[0] * Math.PI / 180);
-      const distance = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
-      
-      return {
-        providerId: `provider-${i+1}`,
-        coordinates: [lat, lng],
-        lastUpdated: Date.now(),
-        isAvailable: true,
-        distance,
-        name: `Provider ${i+1}`,
-        rating: 3 + Math.random() * 2 // 3-5 stars
-      };
-    }).sort((a, b) => (a.distance || 0) - (b.distance || 0));
-  };
+      // Add message to local state
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `msg-${Date.now()}-${Math.random()}`,
+          from: user.id,
+          fromName: user.name,
+          to,
+          text,
+          timestamp: new Date()
+        }
+      ]);
+    }
+  }, [socket, user]);
 
   return (
     <SocketContext.Provider value={{ 
@@ -203,7 +245,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       emitServiceRequest,
       nearbyProviders,
       connectedProvider,
-      pairWithProvider
+      pairWithProvider,
+      toggleProviderAvailability,
+      sendMessage,
+      messages
     }}>
       {children}
     </SocketContext.Provider>

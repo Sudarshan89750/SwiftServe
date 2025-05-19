@@ -32,7 +32,7 @@ interface MapViewProps {
   routePoints?: [number, number][];
 }
 
-const MapView = ({ center, popupContent, markers = [], zoom = 13, onMapClick, showRouteLine = false, routePoints = [] }: MapViewProps) => {
+export const MapView = ({ center, popupContent, markers = [], zoom = 13, onMapClick, showRouteLine = false, routePoints = [] }: MapViewProps) => {
   // State to track if component is mounted (client-side only)
   const [isMounted, setIsMounted] = useState(false);
   
