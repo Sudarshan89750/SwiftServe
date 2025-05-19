@@ -1,0 +1,298 @@
+import { Request, Response } from 'express';
+import Provider from '../models/Provider.model';
+import User from '../models/User.model';
+import Service from '../models/Service.model';
+import mongoose from 'mongoose';
+
+// @desc    Get all providers
+// @route   GET /api/providers
+// @access  Public
+export const getProviders = async (req: Request, res: Response) => {
+  try {
+    const providers = await Provider.find()
+      .populate('userId', 'name email avatar phone')
+      .populate('services', 'name category');
+    
+    res.status(200).json({
+      success: true,
+      count: providers.length,
+      data: providers
+    });
+  } catch (error) {
+    console.error('Get providers error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Get single provider
+// @route   GET /api/providers/:id
+// @access  Public
+export const getProvider = async (req: Request, res: Response) => {
+  try {
+    const provider = await Provider.findById(req.params.id)
+      .populate('userId', 'name email avatar phone')
+      .populate('services', 'name category description basePrice image');
+    
+    if (!provider) {
+      return res.status(404).json({
+        success: false,
+        message: 'Provider not found'
+      });
+    }
+    
+    res.status(200).json({
+      success: true,
+      data: provider
+    });
+  } catch (error) {
+    console.error('Get provider error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Create provider profile
+// @route   POST /api/providers
+// @access  Private
+export const createProvider = async (req: Request, res: Response) => {
+  try {
+    // Check if user is already a provider
+    const existingProvider = await Provider.findOne({ userId: req.user?.id });
+    
+    if (existingProvider) {
+      return res.status(400).json({
+        success: false,
+        message: 'Provider profile already exists'
+      });
+    }
+    
+    // Update user role to provider
+    await User.findByIdAndUpdate(req.user?.id, { role: 'provider' });
+    
+    const { hourlyRate, description, services, availability, coordinates } = req.body;
+    
+    const provider = await Provider.create({
+      userId: req.user?.id,
+      hourlyRate,
+      description,
+      services: services || [],
+      availability: availability || {},
+      coordinates: coordinates || [0, 0]
+    });
+    
+    // Update services providersCount
+    if (services && services.length > 0) {
+      await Service.updateMany(
+        { _id: { $in: services } },
+        { $inc: { providersCount: 1 } }
+      );
+    }
+    
+    res.status(201).json({
+      success: true,
+      data: provider
+    });
+  } catch (error) {
+    console.error('Create provider error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Update provider profile
+// @route   PUT /api/providers/:id
+// @access  Private
+export const updateProvider = async (req: Request, res: Response) => {
+  try {
+    let provider = await Provider.findById(req.params.id);
+    
+    if (!provider) {
+      return res.status(404).json({
+        success: false,
+        message: 'Provider not found'
+      });
+    }
+    
+    // Check if user is the provider or an admin
+    if (
+      provider.userId.toString() !== req.user?.id &&
+      req.user?.role !== 'admin'
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to update this provider'
+      });
+    }
+    
+    const { hourlyRate, description, services, availability, coordinates, isAvailable } = req.body;
+    
+    // Handle services update
+    if (services && Array.isArray(services)) {
+      // Get current services
+      const currentServices = provider.services.map(s => s.toString());
+      
+      // Find services to add and remove
+      const servicesToAdd = services.filter(
+        s => !currentServices.includes(s.toString())
+      );
+      
+      const servicesToRemove = currentServices.filter(
+        s => !services.includes(s)
+      );
+      
+      // Update services providersCount
+      if (servicesToAdd.length > 0) {
+        await Service.updateMany(
+          { _id: { $in: servicesToAdd } },
+          { $inc: { providersCount: 1 } }
+        );
+      }
+      
+      if (servicesToRemove.length > 0) {
+        await Service.updateMany(
+          { _id: { $in: servicesToRemove } },
+          { $inc: { providersCount: -1 } }
+        );
+      }
+    }
+    
+    // Update provider
+    provider = await Provider.findByIdAndUpdate(
+      req.params.id,
+      {
+        hourlyRate,
+        description,
+        services,
+        availability,
+        coordinates,
+        isAvailable
+      },
+      { new: true, runValidators: true }
+    );
+    
+    res.status(200).json({
+      success: true,
+      data: provider
+    });
+  } catch (error) {
+    console.error('Update provider error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Delete provider profile
+// @route   DELETE /api/providers/:id
+// @access  Private
+export const deleteProvider = async (req: Request, res: Response) => {
+  try {
+    const provider = await Provider.findById(req.params.id);
+    
+    if (!provider) {
+      return res.status(404).json({
+        success: false,
+        message: 'Provider not found'
+      });
+    }
+    
+    // Check if user is the provider or an admin
+    if (
+      provider.userId.toString() !== req.user?.id &&
+      req.user?.role !== 'admin'
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to delete this provider'
+      });
+    }
+    
+    // Update services providersCount
+    if (provider.services.length > 0) {
+      await Service.updateMany(
+        { _id: { $in: provider.services } },
+        { $inc: { providersCount: -1 } }
+      );
+    }
+    
+    // Update user role back to customer
+    await User.findByIdAndUpdate(provider.userId, { role: 'customer' });
+    
+    await provider.deleteOne();
+    
+    res.status(200).json({
+      success: true,
+      message: 'Provider profile deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete provider error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Get nearby providers
+// @route   GET /api/providers/nearby
+// @access  Public
+export const getNearbyProviders = async (req: Request, res: Response) => {
+  try {
+    const { lat, lng, distance = 10, serviceId } = req.query;
+    
+    if (!lat || !lng) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide latitude and longitude'
+      });
+    }
+    
+    // Convert to numbers
+    const latitude = parseFloat(lat as string);
+    const longitude = parseFloat(lng as string);
+    const maxDistance = parseFloat(distance as string);
+    
+    // Build query
+    let query: any = {
+      isAvailable: true,
+      coordinates: {
+        $near: {
+          $geometry: {
+            type: 'Point',
+            coordinates: [longitude, latitude]
+          },
+          $maxDistance: maxDistance * 1000 // Convert km to meters
+        }
+      }
+    };
+    
+    // Add service filter if provided
+    if (serviceId) {
+      query.services = new mongoose.Types.ObjectId(serviceId as string);
+    }
+    
+    const providers = await Provider.find(query)
+      .populate('userId', 'name email avatar phone')
+      .populate('services', 'name category');
+    
+    res.status(200).json({
+      success: true,
+      count: providers.length,
+      data: providers
+    });
+  } catch (error) {
+    console.error('Get nearby providers error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
