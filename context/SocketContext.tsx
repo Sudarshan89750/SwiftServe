@@ -42,8 +42,8 @@ export interface Message {
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
 
-// Socket server URL
-const SOCKET_URL = 'http://localhost:5000';
+// Socket server URL - use relative URL for Socket.io to work with the Vite proxy
+const SOCKET_URL = '/';
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [socket, setSocket] = useState<Socket | null>(null);

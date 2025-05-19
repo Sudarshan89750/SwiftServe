@@ -77,7 +77,10 @@ export const setupSocketHandlers = (io: Server) => {
           const provider = await Provider.findOne({ userId });
           
           if (provider) {
-            provider.coordinates = [data.latitude, data.longitude];
+            provider.coordinates = {
+              type: 'Point',
+              coordinates: [data.longitude, data.latitude] // GeoJSON uses [longitude, latitude]
+            };
             provider.isAvailable = true;
             await provider.save();
           }

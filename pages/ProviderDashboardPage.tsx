@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import { getUserBookings, getProvider } from '../services/api';
+import { getUserBookings, getProvider, getProviders } from '../services/api';
 import { AvailabilityToggle } from '../components/provider/AvailabilityToggle';
 import { ServiceLogCard } from '../components/service/ServiceLogCard';
 import MapView from '../components/map/MapView';
@@ -25,16 +25,44 @@ const ProviderDashboardPage = () => {
       
       try {
         setLoading(true);
+        console.log('Fetching provider data for user:', user);
         
         // Fetch provider profile
         if (user.role === 'provider') {
-          const providerData = await getProvider(user.id);
-          setProvider(providerData);
+          try {
+            const providerData = await getProvider(user.id);
+            console.log('Provider data fetched:', providerData);
+            setProvider(providerData);
+          } catch (providerErr) {
+            console.error('Error fetching provider data:', providerErr);
+            // If provider data not found by user ID, try to find by userId field
+            try {
+              const providers = await getProviders();
+              const userProvider = providers.find(p => 
+                p.userId && (p.userId === user.id || p.userId._id === user.id)
+              );
+              
+              if (userProvider) {
+                console.log('Provider found by userId:', userProvider);
+                setProvider(userProvider);
+              } else {
+                console.error('No provider profile found for this user');
+                setError('Provider profile not found. Please contact support.');
+              }
+            } catch (listErr) {
+              console.error('Error fetching providers list:', listErr);
+            }
+          }
         }
         
         // Fetch bookings
-        const bookingsData = await getUserBookings();
-        setBookings(bookingsData);
+        try {
+          const bookingsData = await getUserBookings();
+          console.log('Bookings fetched:', bookingsData);
+          setBookings(bookingsData);
+        } catch (bookingErr) {
+          console.error('Error fetching bookings:', bookingErr);
+        }
       } catch (err) {
         console.error('Error fetching data:', err);
         setError('Failed to load dashboard data');

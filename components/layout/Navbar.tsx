@@ -71,9 +71,14 @@ export const Navbar = () => {
                   </Link>
                 )}
                 <div className="flex items-center space-x-4">
-                  {(user?.role === 'admin' || user?.role === 'provider') && (
+                  {user?.role === 'admin' && (
                     <Link to="/dashboard" className="text-sm font-medium text-indigo-600 hover:text-indigo-500">
                       Dashboard
+                    </Link>
+                  )}
+                  {user?.role === 'provider' && (
+                    <Link to="/provider-dashboard" className="text-sm font-medium text-indigo-600 hover:text-indigo-500">
+                      Provider Dashboard
                     </Link>
                   )}
                   <Link to="/profile" className="flex items-center space-x-2">
@@ -211,13 +216,22 @@ export const Navbar = () => {
                     Admin Dashboard
                   </Link>
                 )}
-                {(user?.role === 'admin' || user?.role === 'provider') && (
+                {user?.role === 'admin' && (
                   <Link
                     to="/dashboard"
                     className="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
                     onClick={() => setIsMenuOpen(false)}
                   >
                     Dashboard
+                  </Link>
+                )}
+                {user?.role === 'provider' && (
+                  <Link
+                    to="/provider-dashboard"
+                    className="block px-4 py-2 text-base font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Provider Dashboard
                   </Link>
                 )}
                 <button

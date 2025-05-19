@@ -75,13 +75,27 @@ const createProvider = async (req, res) => {
         // Update user role to provider
         await User_model_1.default.findByIdAndUpdate(req.user?.id, { role: 'provider' });
         const { hourlyRate, description, services, availability, coordinates } = req.body;
+        // Format coordinates as GeoJSON Point
+        let geoJsonCoordinates;
+        if (coordinates && Array.isArray(coordinates) && coordinates.length === 2) {
+            geoJsonCoordinates = {
+                type: 'Point',
+                coordinates: [coordinates[1], coordinates[0]] // Convert [lat, lng] to GeoJSON [lng, lat]
+            };
+        }
+        else {
+            geoJsonCoordinates = {
+                type: 'Point',
+                coordinates: [0, 0] // Default coordinates
+            };
+        }
         const provider = await Provider_model_1.default.create({
             userId: req.user?.id,
             hourlyRate,
             description,
             services: services || [],
             availability: availability || {},
-            coordinates: coordinates || [0, 0]
+            coordinates: geoJsonCoordinates
         });
         // Update services providersCount
         if (services && services.length > 0) {
@@ -137,15 +151,22 @@ const updateProvider = async (req, res) => {
                 await Service_model_1.default.updateMany({ _id: { $in: servicesToRemove } }, { $inc: { providersCount: -1 } });
             }
         }
-        // Update provider
-        provider = await Provider_model_1.default.findByIdAndUpdate(req.params.id, {
+        // Format coordinates as GeoJSON Point if provided
+        let updateData = {
             hourlyRate,
             description,
             services,
             availability,
-            coordinates,
             isAvailable
-        }, { new: true, runValidators: true });
+        };
+        if (coordinates && Array.isArray(coordinates) && coordinates.length === 2) {
+            updateData.coordinates = {
+                type: 'Point',
+                coordinates: [coordinates[1], coordinates[0]] // Convert [lat, lng] to GeoJSON [lng, lat]
+            };
+        }
+        // Update provider
+        provider = await Provider_model_1.default.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true });
         res.status(200).json({
             success: true,
             data: provider
@@ -221,10 +242,10 @@ const getNearbyProviders = async (req, res) => {
         let query = {
             isAvailable: true,
             coordinates: {
-                $near: {
+                $nearSphere: {
                     $geometry: {
                         type: 'Point',
-                        coordinates: [longitude, latitude]
+                        coordinates: [longitude, latitude] // GeoJSON uses [longitude, latitude]
                     },
                     $maxDistance: maxDistance * 1000 // Convert km to meters
                 }

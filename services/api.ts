@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { Service, Provider, Booking, Review } from '../types';
 
-const API_URL = 'http://localhost:5000/api';
+// Use relative URL for API requests to work with the Vite proxy
+const API_URL = '/api';
 
 // Set up axios instance with token
 const api = axios.create({

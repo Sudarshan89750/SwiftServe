@@ -24,7 +24,8 @@ export interface SignupData {
   services?: string[];
 }
 
-const API_URL = 'http://localhost:5000/api';
+// Use relative URL for API requests to work with the Vite proxy
+const API_URL = '/api';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 

@@ -76,13 +76,27 @@ export const createProvider = async (req: Request, res: Response) => {
     
     const { hourlyRate, description, services, availability, coordinates } = req.body;
     
+    // Format coordinates as GeoJSON Point
+    let geoJsonCoordinates;
+    if (coordinates && Array.isArray(coordinates) && coordinates.length === 2) {
+      geoJsonCoordinates = {
+        type: 'Point',
+        coordinates: [coordinates[1], coordinates[0]] // Convert [lat, lng] to GeoJSON [lng, lat]
+      };
+    } else {
+      geoJsonCoordinates = {
+        type: 'Point',
+        coordinates: [0, 0] // Default coordinates
+      };
+    }
+
     const provider = await Provider.create({
       userId: req.user?.id,
       hourlyRate,
       description,
       services: services || [],
       availability: availability || {},
-      coordinates: coordinates || [0, 0]
+      coordinates: geoJsonCoordinates
     });
     
     // Update services providersCount
@@ -163,17 +177,26 @@ export const updateProvider = async (req: Request, res: Response) => {
       }
     }
     
+    // Format coordinates as GeoJSON Point if provided
+    let updateData: any = {
+      hourlyRate,
+      description,
+      services,
+      availability,
+      isAvailable
+    };
+
+    if (coordinates && Array.isArray(coordinates) && coordinates.length === 2) {
+      updateData.coordinates = {
+        type: 'Point',
+        coordinates: [coordinates[1], coordinates[0]] // Convert [lat, lng] to GeoJSON [lng, lat]
+      };
+    }
+
     // Update provider
     provider = await Provider.findByIdAndUpdate(
       req.params.id,
-      {
-        hourlyRate,
-        description,
-        services,
-        availability,
-        coordinates,
-        isAvailable
-      },
+      updateData,
       { new: true, runValidators: true }
     );
     
@@ -264,10 +287,10 @@ export const getNearbyProviders = async (req: Request, res: Response) => {
     let query: any = {
       isAvailable: true,
       coordinates: {
-        $near: {
+        $nearSphere: {
           $geometry: {
             type: 'Point',
-            coordinates: [longitude, latitude]
+            coordinates: [longitude, latitude] // GeoJSON uses [longitude, latitude]
           },
           $maxDistance: maxDistance * 1000 // Convert km to meters
         }

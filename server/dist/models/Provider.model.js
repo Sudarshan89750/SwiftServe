@@ -71,13 +71,19 @@ const providerSchema = new mongoose_1.Schema({
         default: {}
     },
     coordinates: {
-        type: [Number],
-        required: true,
-        validate: {
-            validator: function (v) {
-                return v.length === 2;
-            },
-            message: 'Coordinates must be [latitude, longitude]'
+        type: {
+            type: String,
+            enum: ['Point'],
+            default: 'Point'
+        },
+        coordinates: {
+            type: [Number],
+            validate: {
+                validator: function (v) {
+                    return v.length === 2;
+                },
+                message: 'Coordinates must be [longitude, latitude]'
+            }
         }
     },
     isAvailable: {
@@ -87,4 +93,6 @@ const providerSchema = new mongoose_1.Schema({
 }, {
     timestamps: true
 });
+// Create a 2dsphere index for geospatial queries
+providerSchema.index({ coordinates: '2dsphere' });
 exports.default = mongoose_1.default.model('Provider', providerSchema);

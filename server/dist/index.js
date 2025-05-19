@@ -28,14 +28,20 @@ const server = http_1.default.createServer(app);
 // Initialize Socket.IO
 const io = new socket_io_1.Server(server, {
     cors: {
-        origin: '*',
-        methods: ['GET', 'POST']
+        origin: process.env.CLIENT_URL || '*',
+        methods: ['GET', 'POST'],
+        credentials: true
     }
 });
 // Middleware
-app.use((0, cors_1.default)());
+app.use((0, cors_1.default)({
+    origin: process.env.CLIENT_URL || '*',
+    credentials: true
+}));
 app.use(express_1.default.json());
-app.use((0, helmet_1.default)());
+app.use((0, helmet_1.default)({
+    crossOriginResourcePolicy: { policy: 'cross-origin' }
+}));
 app.use((0, morgan_1.default)('dev'));
 // API routes
 app.use('/api/auth', auth_routes_1.default);
@@ -56,8 +62,8 @@ mongoose_1.default.connect(MONGODB_URI)
     .then(() => {
     console.log('Connected to MongoDB');
     // Start the server
-    const PORT = process.env.PORT || 5000;
-    server.listen(PORT, () => {
+    const PORT = parseInt(process.env.PORT || '5000', 10);
+    server.listen(PORT, '0.0.0.0', () => {
         console.log(`Server running on port ${PORT}`);
     });
 })

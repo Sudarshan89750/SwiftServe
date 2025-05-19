@@ -9,15 +9,16 @@ export default defineConfig({
     port: 12000,
     cors: true,
     hmr: {
-      host: 'localhost',
+      clientPort: 443,
+      host: 'work-1-bmgshkdznvzeytfi.prod-runtime.all-hands.dev',
     },
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:12001',
         changeOrigin: true,
       },
       '/socket.io': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:12001',
         changeOrigin: true,
         ws: true,
       },

@@ -51,7 +51,10 @@ const setupSocketHandlers = (io) => {
                 if (socket.data.user.role === 'provider') {
                     const provider = await Provider_model_1.default.findOne({ userId });
                     if (provider) {
-                        provider.coordinates = [data.latitude, data.longitude];
+                        provider.coordinates = {
+                            type: 'Point',
+                            coordinates: [data.longitude, data.latitude] // GeoJSON uses [longitude, latitude]
+                        };
                         provider.isAvailable = true;
                         await provider.save();
                     }
